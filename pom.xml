@@ -6,7 +6,7 @@
 
     <groupId>ManhuntPlugin</groupId>
     <artifactId>manhuntplugin</artifactId>
-    <version>2.3-SNAPSHOT</version>
+    <version>1.0</version>
     <packaging>jar</packaging>
 
     <name>ManhuntPlugin</name>

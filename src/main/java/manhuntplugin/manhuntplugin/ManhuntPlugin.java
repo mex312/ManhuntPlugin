@@ -24,7 +24,6 @@ public final class ManhuntPlugin extends JavaPlugin {
     private Player speedrunner = null;
     private LinkedList<Player> hunters = new LinkedList<>();
     private final Random rand = new Random();
-    private final LinkedList<CompassMeta> compassesToUpdate = new LinkedList<>();
     private boolean isManhuntActive = false;
 
     private final BukkitRunnable compassesUpdater = new BukkitRunnable() {
@@ -64,45 +63,68 @@ public final class ManhuntPlugin extends JavaPlugin {
         speedrunner = player;
         hunters = new LinkedList<>(Bukkit.getServer().getOnlinePlayers());
         hunters.remove(player);
+        player.getInventory().all(Material.COMPASS).forEach((i, item) -> {
+            if(item.getItemMeta().hasCustomModelData()) {
+                if (item.getItemMeta().getCustomModelData() == 8800) {
+                    player.getInventory().remove(item);
+                }
+            }
+        });
         Bukkit.getServer().broadcastMessage(player.getName() + " is now " + ChatColor.DARK_GREEN + "Speedrunner" + ChatColor.WHITE + "!");
     }
 
     private void updateCompasses() {
-        compassesToUpdate.removeIf(Objects::isNull);
-        for (CompassMeta meta : compassesToUpdate) {
-            setCompass(meta);
+        LinkedList<ItemStack> compassesToUpdate = new LinkedList<>();
+        for(Player hunter : hunters) {
+            hunter.getInventory().all(Material.COMPASS).forEach((i, item) -> {
+                if(item.getItemMeta().hasCustomModelData()) {
+                    if (item.getItemMeta().getCustomModelData() == 8800) {
+                        compassesToUpdate.add(item);
+                    }
+                }
+            });
+        }
+        for (ItemStack compass : compassesToUpdate) {
+            setCompass(compass);
         }
     }
 
-    private void setCompass(CompassMeta meta) {
-        if(speedrunner != null) {
-            meta.setLodestoneTracked(false);
-            meta.setLodestone(speedrunner.getLocation().add(rand.nextInt(64) - 32, 0, rand.nextInt(64) - 32));
-        } else {
-            meta.setLodestoneTracked(false);
-            meta.setLodestone(null);
-        }
-    }
-
-    private void addCompass(CompassMeta meta) {
-        if(!compassesToUpdate.contains(meta)) {
-            compassesToUpdate.add(meta);
+    private void setCompass(ItemStack compass) {
+        try {
+            CompassMeta meta = (CompassMeta) compass.getItemMeta();
+            if (meta == null) return;
+            if (speedrunner != null) {
+                Location location = speedrunner.getLocation().add(rand.nextInt(16) - 8, 0, rand.nextInt(16) - 8);
+                meta.setLodestoneTracked(false);
+                meta.setLodestone(location);
+                meta.setLodestoneTracked(false);
+            } else {
+                meta.setLodestoneTracked(false);
+                meta.setLodestone(null);
+            }
+            compass.setItemMeta(meta);
+        } catch (Throwable ignored) {
+            Bukkit.getLogger().info("Cannot set a compass");
         }
     }
 
     private boolean giveCompass(Player player) {
         AtomicBoolean hasCompass = new AtomicBoolean(false);
         player.getInventory().all(Material.COMPASS).forEach((i, item) -> {
-            if(compassesToUpdate.contains((CompassMeta) item.getItemMeta())) {
+            if(item.getItemMeta().getCustomModelData() == 8800) {
                 hasCompass.set(true);
             }
         });
         if(!hasCompass.get()) {
             ItemStack compass = new ItemStack(Material.COMPASS);
-            player.getInventory().addItem(compass);
-            addCompass((CompassMeta) compass.getItemMeta());
+            CompassMeta meta = (CompassMeta) compass.getItemMeta();
+            assert meta != null;
+            meta.setCustomModelData(8800);
+            meta.setDisplayName(ChatColor.WHITE + "Kill " + ChatColor.DARK_GREEN + "him!");
+            compass.setItemMeta(meta);
+            player.getInventory().addItem(compass).size();
         }
-        return !hasCompass.get();
+        return hasCompass.get();
     }
 
     private class ManhuntCommand implements CommandExecutor {
@@ -207,6 +229,13 @@ public final class ManhuntPlugin extends JavaPlugin {
         public void onBlockBreak(BlockBreakEvent e) {
             if(!isManhuntActive) e.setCancelled(true);
         }
+
+        @EventHandler
+        public void onPlayerPickupItem(PlayerPickupItemEvent e) {
+            if(e.getPlayer() == speedrunner && e.getItem().getItemStack().getType() == Material.COMPASS && e.getItem().getItemStack().getItemMeta().getCustomModelData() == 8800) {
+                e.setCancelled(true);
+            }
+        }
     }
 
     @Override
@@ -217,7 +246,7 @@ public final class ManhuntPlugin extends JavaPlugin {
         this.getCommand("stopmanhunt").setExecutor(new ManhuntCommand());
         this.getCommand("startmanhunt").setExecutor(new ManhuntCommand());
         Bukkit.getPluginManager().registerEvents(new ManhuntListener(), this);
-        compassesUpdater.runTaskTimer(this, 0, 5);
+        compassesUpdater.runTaskTimer(this, 0, 100);
         Bukkit.getLogger().info(Arrays.toString(Bukkit.getWorlds().toArray()));
         Bukkit.getServer().getWorlds().forEach(world -> world.setGameRule(GameRule.MOB_GRIEFING, false));
     }
